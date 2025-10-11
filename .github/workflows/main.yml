@@ -25,7 +25,7 @@ jobs:
       - name: Create RDP User with Fixed Password
         run: |
           $username = "RDP"
-          $passwordPlain = "Kayckyy2024@"
+          $passwordPlain = "Kayckyy2024@Lex2025"
           $securePass = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
 
           # Create a local user if it doesn't exist, and ensure they are an admin
