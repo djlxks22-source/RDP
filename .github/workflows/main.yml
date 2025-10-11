@@ -1,0 +1,118 @@
+name: Cloud Gaming RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cloud-gaming:
+    runs-on: windows-2022
+    timeout-minutes: 3600
+
+    steps:
+      - name: Configure Core RDP Settings
+        run: |
+          # Enable Remote Desktop and disable Network Level Authentication (NLA)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+
+          # Firewall for RDP
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+
+          # Restart the Remote Desktop Service to apply changes
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User with Fixed Password
+        run: |
+          $username = "RDP"
+          $passwordPlain = "kayzin199"
+          $securePass = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
+
+          # Create a local user if it doesn't exist, and ensure they are an admin
+          if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires -PasswordNeverExpires
+          }
+          
+          # Add the user to both Administrators and Remote Desktop Users groups
+          Add-LocalGroupMember -Group "Administrators" -Member $username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+
+          echo "RDP_USER=$username" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$passwordPlain" >> $env:GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          if (-not $tsIP) { Write-Error "Tailscale IP not assigned"; exit 1 }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+      
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) { Write-Error "TCP connection failed"; exit 1 }
+
+      - name: Install Common Gaming Applications (using Chocolatey)
+        run: |
+          choco install googlechrome -y
+          choco install discord -y
+          choco install 7zip -y
+          
+      - name: Install Visual C++ Runtimes
+        run: |
+          $urls = @(
+            "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+            "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+          )
+          foreach ($url in $urls) {
+              $installer = "$env:TEMP\vc_redist.exe"
+              Invoke-WebRequest -Uri $url -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/install /quiet /norestart" -Wait
+              Remove-Item $installer -Force
+          }
+      
+      - name: Install DirectX and Vulkan
+        run: |
+          Write-Host "Vulkan runtime needs to be downloaded manually if necessary."
+          Write-Host "DirectX is a core component of Windows 2022 and no extra steps are required."
+
+      - name: Install Gaming Platforms
+        run: |
+          $steamUrl = "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"
+          $epicUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi"
+          
+          # Install Steam
+          Write-Host "Installing Steam..."
+          Invoke-WebRequest -Uri $steamUrl -OutFile "$env:TEMP\SteamSetup.exe"
+          Start-Process -FilePath "$env:TEMP\SteamSetup.exe" -ArgumentList "/S" -Wait
+          Remove-Item "$env:TEMP\SteamSetup.exe" -Force
+          
+          # Install Epic Games Launcher
+          Write-Host "Installing Epic Games Launcher..."
+          Invoke-WebRequest -Uri $epicUrl -OutFile "$env:TEMP\EpicInstaller.msi"
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$env:TEMP\EpicInstaller.msi`"", "/quiet", "/norestart" -Wait
+          Remove-Item "$env:TEMP\EpicInstaller.msi" -Force
+
+      - name: Maintain Connection
+        run: |
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Password: $env:RDP_PASSWORD"
+          Write-Host "==================`n"
+          while ($true) { Start-Sleep -Seconds 300 }
