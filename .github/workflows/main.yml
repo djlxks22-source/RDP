@@ -94,29 +94,6 @@ jobs:
               Start-Process -FilePath $installer -ArgumentList "/install /quiet /norestart" -Wait
               Remove-Item $installer -Force
           }
-      
-      - name: Install MuMu Nebula
-        run: |
-          Write-Host "Downloading MuMu Nebula..."
-          $mumuUrl = "https://mumu-player.mstatic.com/external/MumuPlayer-2.6.12-x64-en-US.exe"
-          $installerPath = "$env:TEMP\MuMuNebula.exe"
-          
-          try {
-              Invoke-WebRequest -Uri $mumuUrl -OutFile $installerPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-              Write-Host "Installing MuMu Nebula..."
-              Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-              Write-Host "MuMu Nebula installed successfully"
-          }
-          catch {
-              Write-Warning "Failed to download MuMu Nebula from primary source, trying alternative method..."
-              # Alternative: Install via store or chocolatey if available
-              choco install mumuplayer -y --ignore-checksums
-          }
-          finally {
-              if (Test-Path $installerPath) {
-                  Remove-Item $installerPath -Force
-              }
-          }
 
       - name: Install Additional Development Tools
         run: |
