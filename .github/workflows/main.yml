@@ -70,7 +70,7 @@ jobs:
       - name: Install Common Gaming Applications (using Chocolatey)
         run: |
           choco install googlechrome -y
-          choco install discord -y
+          choco install AndroidStudio -y
           choco install 7zip -y
           
       - name: Install Visual C++ Runtimes
@@ -90,23 +90,6 @@ jobs:
         run: |
           Write-Host "Vulkan runtime needs to be downloaded manually if necessary."
           Write-Host "DirectX is a core component of Windows 2022 and no extra steps are required."
-
-      - name: Install Gaming Platforms
-        run: |
-          $steamUrl = "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"
-          $epicUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi"
-          
-          # Install Steam
-          Write-Host "Installing Steam..."
-          Invoke-WebRequest -Uri $steamUrl -OutFile "$env:TEMP\SteamSetup.exe"
-          Start-Process -FilePath "$env:TEMP\SteamSetup.exe" -ArgumentList "/S" -Wait
-          Remove-Item "$env:TEMP\SteamSetup.exe" -Force
-          
-          # Install Epic Games Launcher
-          Write-Host "Installing Epic Games Launcher..."
-          Invoke-WebRequest -Uri $epicUrl -OutFile "$env:TEMP\EpicInstaller.msi"
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$env:TEMP\EpicInstaller.msi`"", "/quiet", "/norestart" -Wait
-          Remove-Item "$env:TEMP\EpicInstaller.msi" -Force
 
       - name: Maintain Connection
         run: |
