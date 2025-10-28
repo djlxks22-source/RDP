@@ -72,8 +72,6 @@ jobs:
           choco install googlechrome -y
           choco install AndroidStudio -y
           choco install 7zip -y
-          choco install microsoft-openjdk17 -y
-          choco install vscode -y
           
       - name: Install Visual C++ Runtimes
         run: |
