@@ -34,7 +34,7 @@ jobs:
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", ""$installerPath"", "/quiet", "/norestart" -Wait
+          Start-Process msiexec.exe -ArgumentList "/i $installerPath /quiet /norestart" -Wait
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=omni-audio-srv
           $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
@@ -44,18 +44,16 @@ jobs:
           choco install git -y
           choco install ffmpeg -y
           choco install 7zip -y
-          # O Windows 2022 já tem Python, mas garantimos a instalação de pacotes
           python -m pip install --upgrade pip
           pip install demucs numpy scipy soundfile pydub
 
-      - name: Install Visual C++ Runtimes (Required for Audio DLLs)
+      - name: Install Visual C++ Runtimes
         run: |
           choco install vcredist140 -y
 
       - name: Install Optional Apps
         run: |
           choco install googlechrome -y
-          # choco install androidstudio -y  # Descomente se realmente precisar
 
       - name: Maintain Connection
         run: |
@@ -63,70 +61,5 @@ jobs:
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "User: $env:RDP_USER"
           Write-Host "Pass: $env:RDP_PASSWORD"
-          Write-Host "FFmpeg & Demucs are pre-installed."
           Write-Host "==========================n"
-          while ($true) { Start-Sleep -Seconds 300 }          Add-LocalGroupMember -Group "Administrators" -Member $username
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
-
-          echo "RDP_USER=$username" >> $env:GITHUB_ENV
-          echo "RDP_PASSWORD=$passwordPlain" >> $env:GITHUB_ENV
-
-      - name: Install Tailscale
-        run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-
-      - name: Establish Tailscale Connection
-        run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 5
-              $retries++
-          }
-          if (-not $tsIP) { Write-Error "Tailscale IP not assigned"; exit 1 }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-      
-      - name: Verify RDP Accessibility
-        run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) { Write-Error "TCP connection failed"; exit 1 }
-
-      - name: Install Common Gaming Applications (using Chocolatey)
-        run: |
-          choco install googlechrome -y
-          choco install AndroidStudio -y
-          choco install 7zip -y
-          
-      - name: Install Visual C++ Runtimes
-        run: |
-          $urls = @(
-            "https://aka.ms/vs/17/release/vc_redist.x64.exe",
-            "https://aka.ms/vs/17/release/vc_redist.x86.exe"
-          )
-          foreach ($url in $urls) {
-              $installer = "$env:TEMP\vc_redist.exe"
-              Invoke-WebRequest -Uri $url -OutFile $installer
-              Start-Process -FilePath $installer -ArgumentList "/install /quiet /norestart" -Wait
-              Remove-Item $installer -Force
-          }
-      
-      - name: Install DirectX and Vulkan
-        run: |
-          Write-Host "Vulkan runtime needs to be downloaded manually if necessary."
-          Write-Host "DirectX is a core component of Windows 2022 and no extra steps are required."
-
-      - name: Maintain Connection
-        run: |
-          Write-Host "`n=== RDP ACCESS ==="
-          Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: $env:RDP_PASSWORD"
-          Write-Host "==================`n"
           while ($true) { Start-Sleep -Seconds 300 }
