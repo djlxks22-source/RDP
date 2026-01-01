@@ -1,5 +1,4 @@
-name: Cloud Gaming RDP
-
+name: OmniAudio Dev RDP
 on:
   workflow_dispatch:
 
@@ -11,30 +10,62 @@ jobs:
     steps:
       - name: Configure Core RDP Settings
         run: |
-          # Enable Remote Desktop and disable Network Level Authentication (NLA)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-
-          # Firewall for RDP
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-
-          # Restart the Remote Desktop Service to apply changes
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Fixed Password
+      - name: Create RDP User
         run: |
           $username = "RDP"
           $passwordPlain = "Kaycklex2025@15284210"
           $securePass = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
-
-          # Create a local user if it doesn't exist, and ensure they are an admin
           if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
               New-LocalUser -Name $username -Password $securePass -AccountNeverExpires -PasswordNeverExpires
           }
-          
-          # Add the user to both Administrators and Remote Desktop Users groups
           Add-LocalGroupMember -Group "Administrators" -Member $username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+          echo "RDP_USER=$username" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$passwordPlain" >> $env:GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", ""$installerPath"", "/quiet", "/norestart" -Wait
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=omni-audio-srv
+          $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Install OmniAudio Core Tools (FFmpeg, Python, Git)
+        run: |
+          choco install git -y
+          choco install ffmpeg -y
+          choco install 7zip -y
+          # O Windows 2022 já tem Python, mas garantimos a instalação de pacotes
+          python -m pip install --upgrade pip
+          pip install demucs numpy scipy soundfile pydub
+
+      - name: Install Visual C++ Runtimes (Required for Audio DLLs)
+        run: |
+          choco install vcredist140 -y
+
+      - name: Install Optional Apps
+        run: |
+          choco install googlechrome -y
+          # choco install androidstudio -y  # Descomente se realmente precisar
+
+      - name: Maintain Connection
+        run: |
+          Write-Host "n=== OMNIAUDIO RDP READY ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "User: $env:RDP_USER"
+          Write-Host "Pass: $env:RDP_PASSWORD"
+          Write-Host "FFmpeg & Demucs are pre-installed."
+          Write-Host "==========================n"
+          while ($true) { Start-Sleep -Seconds 300 }          Add-LocalGroupMember -Group "Administrators" -Member $username
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
 
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
