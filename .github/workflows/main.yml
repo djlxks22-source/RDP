@@ -1,101 +1,40 @@
-name: OmniAudio Cloud (RDP + GUI)
+name: Cloud Gaming RDP
 
 on:
   workflow_dispatch:
 
 jobs:
-  omniaudio-cloud:
+  cloud-gaming:
     runs-on: windows-2022
     timeout-minutes: 3600
 
     steps:
-      - name: Habilitar RDP (sem NLA pra facilitar conexão)
+      - name: Configure Core RDP Settings
         run: |
+          # Enable Remote Desktop and disable Network Level Authentication (NLA)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
 
+          # Firewall for RDP
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
 
+          # Restart the Remote Desktop Service to apply changes
           Restart-Service -Name TermService -Force
 
-      - name: Criar usuário RDP seguro e único
+      - name: Create RDP User with Fixed Password
         run: |
-          $username = "OmniRDP"
-          \( passwordPlain = "Omni2026_ \){{ github.run_id }}!"
+          $username = "RDP"
+          $passwordPlain = "Kaycklex2025@15284210"
           $securePass = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
 
+          # Create a local user if it doesn't exist, and ensure they are an admin
           if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
               New-LocalUser -Name $username -Password $securePass -AccountNeverExpires -PasswordNeverExpires
           }
-
-          Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
-
-          echo "RDP_USER=$username" >> $env:GITHUB_ENV
-          echo "RDP_PASSWORD=$passwordPlain" >> $env:GITHUB_ENV
-
-      - name: Instalar Tailscale
-        run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
-          $installer = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installer
-          Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
-          Remove-Item $installer -Force
-
-      - name: Conectar Tailscale
-        run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
-            --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
-            --hostname=omniaudio-${{ github.run_id }} `
-            --accept-routes --accept-dns=false --reset
-
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 20) {
-              $tsIP = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4) -replace '\s+', ''
-              Start-Sleep -Seconds 5
-              $retries++
-          }
-          if (-not $tsIP) { Write-Error "Tailscale IP não encontrado"; exit 1 }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-      - name: Clonar o repositório OmniAudio
-        uses: actions/checkout@v4
-        with:
-          repository: Kayckyy/Omni  # ← seu repo
-          path: Omni
-
-      - name: Instalar dependências Python do OmniAudio
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyqt5 pyqtgraph pyopengl numpy scipy soundfile pydub ffmpeg-python
-
-      - name: Instalar Chocolatey + apps úteis
-        run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-
-          choco install -y vcredist140 directx vulkan googlechrome 7zip
-
-      - name: Iniciar GUI do OmniAudio em background
-        run: |
-          cd OmniAudio
-          Start-Process powershell -ArgumentList "-NoExit -Command python main.py gui" -WindowStyle Hidden
-
-      - name: Exibir credenciais RDP (último passo)
-        run: |
-          Write-Host "`n=== ACESSO RDP AO OMNIAUDIO ==="
-          Write-Host "IP Tailscale: $env:TAILSCALE_IP"
-          Write-Host "Usuário: $env:RDP_USER"
-          Write-Host "Senha: $env:RDP_PASSWORD"
-          Write-Host "Porta: 3389 (RDP)"
-          Write-Host "================================`n"
-          Write-Host "Conecte via Remote Desktop (mstsc.exe)"
-          Write-Host "A GUI do OmniAudio já está rodando em background."
-          Write-Host "Sessão válida por até 60 horas."
-          while ($true) { Start-Sleep -Seconds 300 }          Add-LocalGroupMember -Group "Administrators" -Member $username
+          
+          # Add the user to both Administrators and Remote Desktop Users groups
+          Add-LocalGroupMember -Group "Administrators" -Member $username
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
 
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
@@ -131,7 +70,6 @@ jobs:
       - name: Install Common Gaming Applications (using Chocolatey)
         run: |
           choco install googlechrome -y
-          choco install AndroidStudio -y
           choco install 7zip -y
           
       - name: Install Visual C++ Runtimes
